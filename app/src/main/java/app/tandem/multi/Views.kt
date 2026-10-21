@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.ColorFilter
+import android.graphics.PixelFormat
 import android.graphics.Outline
 import android.graphics.Paint
 import android.graphics.Path
@@ -97,7 +99,7 @@ class StatusDot(ctx: Context) : View(ctx) {
                 p.strokeWidth = dpf(1.8f)
                 p.strokeCap = Paint.Cap.ROUND
                 p.strokeJoin = Paint.Join.ROUND
-                p.color = T.INK
+                p.color = T.ON_ACCENT
                 path.reset()
                 path.moveTo(cx - r * 0.4f, cy)
                 path.lineTo(cx - r * 0.1f, cy + r * 0.3f)
@@ -123,6 +125,7 @@ class IconButton(ctx: Context, var kind: Int, private val tint: Int = T.TEXT, fi
         const val CLOSE = 4
         const val PLUS = 5
         const val LAYOUT = 6
+        const val GEAR = 7
     }
 
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -134,7 +137,7 @@ class IconButton(ctx: Context, var kind: Int, private val tint: Int = T.TEXT, fi
             GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(it) }
         }
         val mask = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.WHITE) }
-        background = RippleDrawable(ColorStateList.valueOf(0x40FFFFFF), content, mask)
+        background = RippleDrawable(ColorStateList.valueOf(withAlpha(T.TEXT, 0x30)), content, mask)
     }
 
     override fun onDraw(c: Canvas) {
@@ -185,6 +188,16 @@ class IconButton(ctx: Context, var kind: Int, private val tint: Int = T.TEXT, fi
                 p.style = Paint.Style.FILL
                 c.drawPath(path, p)
             }
+            GEAR -> {
+                p.style = Paint.Style.STROKE
+                c.drawCircle(cx, cy, k * 0.62f, p)
+                for (i in 0 until 8) {
+                    val a = Math.toRadians(i * 45.0)
+                    val ca = Math.cos(a).toFloat()
+                    val sa = Math.sin(a).toFloat()
+                    c.drawLine(cx + ca * k * 0.95f, cy + sa * k * 0.95f, cx + ca * k * 1.3f, cy + sa * k * 1.3f, p)
+                }
+            }
             LAYOUT -> {
                 c.drawRoundRect(cx - k * 1.2f, cy - k, cx + k * 1.2f, cy + k, dpf(2f), dpf(2f), p)
                 c.drawLine(cx, cy - k, cx, cy + k, p)
@@ -192,6 +205,40 @@ class IconButton(ctx: Context, var kind: Int, private val tint: Int = T.TEXT, fi
             }
         }
     }
+}
+
+/**
+ * Rounded border drawn ON TOP of the page. It paints the four corners in the app background colour
+ * instead of clipping the view, because clipping a WebView to a rounded outline makes it render blank
+ * on many phones.
+ */
+class FrameDrawable(private val radius: Float, private val strokeW: Float) : Drawable() {
+    var ringColor: Int = T.LINE
+        set(v) { field = v; invalidateSelf() }
+    private val mask = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = T.INK; style = Paint.Style.FILL }
+    private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+    private val path = Path()
+    private val rf = RectF()
+
+    override fun draw(c: Canvas) {
+        val b = bounds
+        rf.set(b.left.toFloat(), b.top.toFloat(), b.right.toFloat(), b.bottom.toFloat())
+        path.reset()
+        path.fillType = Path.FillType.EVEN_ODD
+        path.addRect(rf, Path.Direction.CW)
+        path.addRoundRect(rf, radius, radius, Path.Direction.CW)
+        c.drawPath(path, mask)
+        ring.strokeWidth = strokeW
+        ring.color = ringColor
+        val h = strokeW / 2f
+        rf.inset(h, h)
+        c.drawRoundRect(rf, radius - h, radius - h, ring)
+    }
+
+    override fun setAlpha(alpha: Int) {}
+    override fun setColorFilter(colorFilter: ColorFilter?) {}
+    @Suppress("OVERRIDE_DEPRECATION")
+    override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
 }
 
 class ProgressLine(ctx: Context) : View(ctx) {
@@ -335,11 +382,7 @@ class PaneLayout(ctx: Context) : ViewGroup(ctx) {
             if (c is PaneView && !newList.contains(c)) c.visibility = View.GONE
         }
         for (v in newList) {
-            if (v.visibility != View.VISIBLE) {
-                v.visibility = View.VISIBLE
-                v.alpha = 0f
-                v.animate().alpha(1f).setDuration(180).start()
-            }
+            if (v.visibility != View.VISIBLE) v.visibility = View.VISIBLE
         }
         divider.visibility = if (newList.size in 2..3) View.VISIBLE else View.GONE
         divider.bringToFront()
@@ -408,8 +451,14 @@ class PaneView(ctx: Context, val pane: Pane) : LinearLayout(ctx) {
     private val title = TextView(ctx)
     private val status = TextView(ctx)
     private val progress = ProgressLine(ctx)
-    private val ring = GradientDrawable()
     private val radius = ctx.dpf(14f)
+    private val frame = FrameDrawable(radius, ctx.dpf(2f))
+    private val overlay = LinearLayout(ctx)
+    private val overlayTitle = TextView(ctx)
+    private val overlayText = TextView(ctx)
+    private val overlayBtn1 = TextView(ctx)
+    private val overlayBtn2 = TextView(ctx)
+    private var pendingSized: (() -> Unit)? = null
     private var compact = false
     private var loading = false
     private val resetStatus = Runnable { render() }
@@ -420,16 +469,8 @@ class PaneView(ctx: Context, val pane: Pane) : LinearLayout(ctx) {
         bg.cornerRadius = radius
         bg.setColor(T.SURFACE)
         background = bg
-        ring.cornerRadius = radius
-        ring.setColor(Color.TRANSPARENT)
-        ring.setStroke(ctx.dp(2), T.LINE)
-        foreground = ring
-        clipToOutline = true
-        outlineProvider = object : ViewOutlineProvider() {
-            override fun getOutline(view: View, outline: Outline) {
-                outline.setRoundRect(0, 0, view.width, view.height, radius)
-            }
-        }
+        frame.ringColor = T.LINE
+        foreground = frame
 
         header.orientation = LinearLayout.HORIZONTAL
         header.gravity = Gravity.CENTER_VERTICAL
@@ -465,7 +506,65 @@ class PaneView(ctx: Context, val pane: Pane) : LinearLayout(ctx) {
         addView(header, LinearLayout.LayoutParams(MATCH, ctx.dp(40)))
         addView(progress, LinearLayout.LayoutParams(MATCH, ctx.dp(2)))
         addView(webHolder, LinearLayout.LayoutParams(MATCH, 0, 1f))
+
+        // Problem overlay (shown instead of a silent white page)
+        overlay.orientation = LinearLayout.VERTICAL
+        overlay.gravity = Gravity.CENTER
+        overlay.setBackgroundColor(T.SURFACE)
+        overlay.setPadding(ctx.dp(20), ctx.dp(12), ctx.dp(20), ctx.dp(12))
+        overlay.visibility = View.GONE
+        overlay.isClickable = true
+        overlayTitle.textSize = 15f
+        overlayTitle.typeface = android.graphics.Typeface.DEFAULT_BOLD
+        overlayTitle.setTextColor(T.TEXT)
+        overlayTitle.gravity = Gravity.CENTER
+        overlayText.textSize = 12f
+        overlayText.setTextColor(T.MUTED)
+        overlayText.gravity = Gravity.CENTER
+        overlayText.setPadding(0, ctx.dp(6), 0, ctx.dp(12))
+        for (b in listOf(overlayBtn1, overlayBtn2)) {
+            b.textSize = 13f
+            b.typeface = android.graphics.Typeface.DEFAULT_BOLD
+            b.gravity = Gravity.CENTER
+            b.setPadding(ctx.dp(18), ctx.dp(9), ctx.dp(18), ctx.dp(9))
+        }
+        overlayBtn1.setTextColor(T.ON_ACCENT)
+        overlayBtn1.background = roundRect(T.ACCENT, ctx.dpf(20f))
+        overlayBtn2.setTextColor(T.TEXT)
+        overlayBtn2.background = roundRect(Color.TRANSPARENT, ctx.dpf(20f), T.LINE, ctx.dp(1))
+        overlay.addView(overlayTitle, LinearLayout.LayoutParams(WRAP, WRAP))
+        overlay.addView(overlayText, LinearLayout.LayoutParams(WRAP, WRAP))
+        overlay.addView(overlayBtn1, LinearLayout.LayoutParams(WRAP, WRAP))
+        val l2 = LinearLayout.LayoutParams(WRAP, WRAP)
+        l2.topMargin = ctx.dp(8)
+        overlay.addView(overlayBtn2, l2)
+        webHolder.addView(overlay, FrameLayout.LayoutParams(MATCH, MATCH))
         render()
+    }
+
+    fun showProblem(title: String, detail: String, b1: String, on1: () -> Unit, b2: String?, on2: (() -> Unit)?) {
+        overlayTitle.text = title
+        overlayText.text = detail
+        overlayBtn1.text = b1
+        overlayBtn1.setOnClickListener { hideProblem(); on1() }
+        if (b2 != null && on2 != null) {
+            overlayBtn2.text = b2
+            overlayBtn2.setOnClickListener { on2() }
+            overlayBtn2.visibility = View.VISIBLE
+        } else {
+            overlayBtn2.visibility = View.GONE
+        }
+        overlay.visibility = View.VISIBLE
+        overlay.bringToFront()
+    }
+
+    fun hideProblem() {
+        overlay.visibility = View.GONE
+    }
+
+    /** Runs [block] once this screen is on screen and has a real size (loading earlier can leave a blank page). */
+    fun whenSized(block: () -> Unit) {
+        if (width > 0 && height > 0 && isShown) post { block() } else pendingSized = block
     }
 
     fun attachWeb(w: WebView) {
@@ -474,7 +573,7 @@ class PaneView(ctx: Context, val pane: Pane) : LinearLayout(ctx) {
             if (ev.actionMasked == MotionEvent.ACTION_DOWN) onFocus?.invoke()
             false
         }
-        webHolder.addView(w, FrameLayout.LayoutParams(MATCH, MATCH))
+        webHolder.addView(w, 0, FrameLayout.LayoutParams(MATCH, MATCH))
     }
 
     fun detachWeb() {
@@ -485,7 +584,7 @@ class PaneView(ctx: Context, val pane: Pane) : LinearLayout(ctx) {
     }
 
     fun setFocused(f: Boolean) {
-        ring.setStroke(context.dp(2), if (f) pane.color else T.LINE)
+        frame.ringColor = if (f) pane.color else T.LINE
         invalidate()
     }
 
@@ -525,7 +624,10 @@ class PaneView(ctx: Context, val pane: Pane) : LinearLayout(ctx) {
             pane.busy -> { txt = "Responding…"; col = pane.color }
             pane.doneUnseen -> { txt = "Finished"; col = T.GREEN }
             loading -> { txt = "Loading…"; col = T.MUTED }
-            else -> { txt = ""; col = T.MUTED }
+            else -> {
+                txt = android.net.Uri.parse(pane.startUrl).host?.removePrefix("www.") ?: ""
+                col = T.MUTED
+            }
         }
         status.text = txt
         status.setTextColor(col)
@@ -534,6 +636,11 @@ class PaneView(ctx: Context, val pane: Pane) : LinearLayout(ctx) {
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
+        val pend = pendingSized
+        if (pend != null && w > 0 && h > 0) {
+            pendingSized = null
+            post { pend() }
+        }
         val c = w < context.dp(300)
         if (c != compact) {
             compact = c

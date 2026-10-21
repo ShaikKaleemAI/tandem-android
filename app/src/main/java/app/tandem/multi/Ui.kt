@@ -84,7 +84,7 @@ private fun Activity.pill(text: String, filled: Boolean, fillColor: Int = T.ACCE
     t.gravity = Gravity.CENTER
     t.setPadding(dp(18), dp(10), dp(18), dp(10))
     if (filled) {
-        t.setTextColor(T.INK)
+        t.setTextColor(T.ON_ACCENT)
         t.background = roundRect(fillColor, dpf(20f))
     } else {
         t.setTextColor(T.TEXT)
@@ -94,7 +94,7 @@ private fun Activity.pill(text: String, filled: Boolean, fillColor: Int = T.ACCE
 }
 
 private fun Activity.rowRipple(): RippleDrawable =
-    RippleDrawable(ColorStateList.valueOf(0x22FFFFFF), null, ColorDrawable(Color.WHITE))
+    RippleDrawable(ColorStateList.valueOf(withAlpha(T.TEXT, 0x22)), null, ColorDrawable(Color.WHITE))
 
 /* ------------------------------------------------------------------ */
 
@@ -273,7 +273,7 @@ fun Activity.showColors(current: Int, onPick: (Int) -> Unit) {
             val g = GradientDrawable()
             g.shape = GradientDrawable.OVAL
             g.setColor(c)
-            if (c == current) g.setStroke(dp(3), Color.WHITE)
+            if (c == current) g.setStroke(dp(3), T.TEXT)
             v.background = g
             v.setOnClickListener {
                 d.dismiss()
