@@ -1,4 +1,4 @@
-# Tandem v4: multi-account AI workspace for Android
+# Tandem v5.1: multi-account AI workspace for Android
 
 Run several AI accounts (Claude, ChatGPT, Gemini, Perplexity, DeepSeek, Grok, Copilot, Le Chat, or any site)
 at the same time. Every screen has its own isolated login, so you never log out and back in.
@@ -20,6 +20,27 @@ at the same time. Every screen has its own isolated login, so you never log out 
 - **Remembers** your screens, layout, divider position and the exact page you were on.
 - **Downloads** work with your login (including generated files), voice chat mic, file upload.
 - Up to 8 screens, 4 visible at once. Hidden screens keep running.
+
+## v5.1 changes
+- **App lock** (Menu > App lock): asks for your phone PIN, pattern or fingerprint when you open Tandem or return after 30 seconds. Also blocks screenshots and hides content in Recent apps.
+- **Finish detector**: long-press a screen header > Finish detector to give any site its Stop-button selector so finished alerts work everywhere.
+- **Crash report**: if the app ever crashes, Menu > Copy last crash report.
+
+## v5.0 changes
+- **Dark and light themes** (Menu > Theme: follow system, dark or light). Whole app, dialogs and status bar.
+- **Ask all open screens**: type one question and send it to every visible AI at once (beta; uses each site's chat box).
+- Three page identities (mobile Chrome, desktop Chrome, original WebView) tried automatically if a page loads blank.
+- Each screen header shows the site name.
+
+## v4.1 changes
+- **Logins are kept.** The X button now only closes the screen (frees memory). The account and its login stay saved
+  and the screen stays in the top bar; tap it to reopen on the same page. Accounts are deleted only from
+  Settings (gear icon) > Accounts > Delete account.
+- Logins are written to disk when you leave the app, after every page load, and on close, so swiping the app away no longer loses them.
+- **Blank white screen fixes (all sites):** no more rounded clipping around the WebView, pages load only after the
+  screen has a real size, no fade animation, the "X-Requested-With" app header is removed, and a blank-page
+  detector reloads, then switches mobile/desktop identity, then shows a message with Retry.
+- Load errors now show a message instead of a white page. Long-press a screen header > **Copy diagnostics**.
 
 ## Important notes
 - "Finished" detection looks for the site's Stop button. It is built for Claude, ChatGPT, Gemini and Grok
